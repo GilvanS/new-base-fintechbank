@@ -13,6 +13,7 @@ import LimitView from './components/LimitView';
 import PixModal from './components/PixModal';
 import DepositModal from './components/DepositModal';
 import BiometricModal from './components/BiometricModal';
+import BoletoModal from './components/BoletoModal';
 
 // Initial Mock Data
 const INITIAL_TRANSACTIONS: Transaction[] = [
@@ -297,6 +298,7 @@ export default function App() {
   // Modals
   const [isPixOpen, setIsPixOpen] = useState(false);
   const [isDepositOpen, setIsDepositOpen] = useState(false);
+  const [isBoletoOpen, setIsBoletoOpen] = useState(false);
 
   // Apply body class when theme changes
   useEffect(() => {
@@ -538,6 +540,7 @@ export default function App() {
               invoiceAmount={invoiceAmount}
               openPixModal={() => setIsPixOpen(true)}
               openDepositModal={() => setIsDepositOpen(true)}
+              openBoletoModal={() => setIsBoletoOpen(true)}
               transactions={transactions}
               onTransactionComplete={handleTransactionComplete}
               theme={theme}
@@ -668,6 +671,14 @@ export default function App() {
         isOpen={isBiometricOpen}
         onClose={() => setIsBiometricOpen(false)}
         onSuccess={() => setBalanceIsVisible(true)}
+        theme={theme}
+      />
+
+      <BoletoModal
+        isOpen={isBoletoOpen}
+        onClose={() => setIsBoletoOpen(false)}
+        accountBalance={accountBalance}
+        onTransactionComplete={handleTransactionComplete}
         theme={theme}
       />
 

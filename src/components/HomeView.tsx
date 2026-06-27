@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, ChevronLeft, Play, Pause, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Plus, Trash2, AlertTriangle, Mic, MicOff, Brain, Loader2, Volume2, Tv, Heart, MoreHorizontal, X, Target, PiggyBank, Edit2 } from 'lucide-react';
+import { Eye, EyeOff, TrendingUp, Bolt, ShoppingBag, CreditCard, Receipt, FileText, ChevronRight, ChevronLeft, Play, Pause, Sparkles, Search, Utensils, Car, Film, Coffee, Wallet, HelpCircle, Calendar, Check, Clock, RefreshCw, Plus, Trash2, AlertTriangle, Mic, MicOff, Brain, Loader2, Volume2, Tv, Heart, MoreHorizontal, X, Target, PiggyBank, Edit2, GripVertical, Settings, ArrowUp, ArrowDown } from 'lucide-react';
 import { ActiveTab, Transaction, RecurringBill } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, PieChart, Pie, LineChart, Line, AreaChart, Area } from 'recharts';
@@ -18,6 +18,7 @@ interface HomeViewProps {
   invoiceAmount: number;
   openPixModal: () => void;
   openDepositModal: () => void;
+  openBoletoModal?: () => void;
   transactions: Transaction[];
   onTransactionComplete: (newTx: Transaction, amount: number) => void;
   theme: 'yellow' | 'midnight';
@@ -30,6 +31,27 @@ interface HomeViewProps {
   setActiveDrawer: (val: 'balance' | 'analytics' | 'insights' | 'trends' | null) => void;
 }
 
+interface Widget {
+  id: string;
+  name: string;
+  visible: boolean;
+  icon: string;
+}
+
+const DEFAULT_WIDGETS: Widget[] = [
+  { id: 'balance', name: 'Saldo em Conta', visible: true, icon: '💵' },
+  { id: 'insights_panel', name: 'Análises e Insights IA', visible: true, icon: '⚡' },
+  { id: 'quick_actions', name: 'Acesso Rápido', visible: true, icon: '⚡' },
+  { id: 'learn_more', name: 'Aprenda Mais', visible: true, icon: '🎓' },
+  { id: 'monthly_budget', name: 'Meta de Gastos', visible: true, icon: '🎯' },
+  { id: 'financial_health', name: 'Saúde Financeira', visible: true, icon: '🩺' },
+  { id: 'recurring_payments', name: 'Contas Recorrentes', visible: true, icon: '📅' },
+  { id: 'credit_card', name: 'Cartão de Crédito', visible: true, icon: '💳' },
+  { id: 'spending_insights', name: 'Tendências de Gastos', visible: true, icon: '📈' },
+  { id: 'investments', name: 'Investimentos', visible: true, icon: '💎' },
+  { id: 'transactions', name: 'Buscar Transações', visible: true, icon: '🔍' },
+];
+
 export default function HomeView({
   accountBalance,
   balanceIsVisible,
@@ -40,6 +62,7 @@ export default function HomeView({
   invoiceAmount,
   openPixModal,
   openDepositModal,
+  openBoletoModal,
   transactions,
   onTransactionComplete,
   theme,
@@ -57,6 +80,53 @@ export default function HomeView({
   });
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [tempGoal, setTempGoal] = useState(monthlyGoal.toString());
+
+  const [widgets, setWidgets] = useState<Widget[]>(() => {
+    const saved = localStorage.getItem('volt_home_widgets');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as Widget[];
+        const parsedIds = new Set(parsed.map((w) => w.id));
+        const missing = DEFAULT_WIDGETS.filter((w) => !parsedIds.has(w.id));
+        return [...parsed, ...missing];
+      } catch (e) {
+        console.error('Error loading widgets layout config', e);
+      }
+    }
+    return DEFAULT_WIDGETS;
+  });
+  const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
+
+  const moveWidget = (index: number, direction: 'up' | 'down') => {
+    const nextIndex = direction === 'up' ? index - 1 : index + 1;
+    if (nextIndex < 0 || nextIndex >= widgets.length) return;
+    const updated = [...widgets];
+    const temp = updated[index];
+    updated[index] = updated[nextIndex];
+    updated[nextIndex] = temp;
+    setWidgets(updated);
+    localStorage.setItem('volt_home_widgets', JSON.stringify(updated));
+  };
+
+  const toggleWidgetVisibility = (id: string) => {
+    const updated = widgets.map((w) => (w.id === id ? { ...w, visible: !w.visible } : w));
+    setWidgets(updated);
+    localStorage.setItem('volt_home_widgets', JSON.stringify(updated));
+  };
+
+  const resetWidgets = () => {
+    setWidgets(DEFAULT_WIDGETS);
+    localStorage.setItem('volt_home_widgets', JSON.stringify(DEFAULT_WIDGETS));
+  };
+
+  const isWidgetVisible = (id: string) => {
+    return widgets.find((w) => w.id === id)?.visible ?? true;
+  };
+
+  const getWidgetIndex = (id: string) => {
+    const index = widgets.findIndex((w) => w.id === id);
+    return index !== -1 ? index : 99;
+  };
 
   // Instagram/WhatsApp style Stories States
   const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null); // Null if stories are closed
@@ -1750,12 +1820,13 @@ export default function HomeView({
       variants={containerVariants}
       initial="hidden"
       animate="show"
-      className="space-y-6 pb-28 pt-4 px-4 max-w-md mx-auto"
+      className="flex flex-col gap-6 pb-28 pt-4 px-4 max-w-md mx-auto"
     >
       {/* Visual Spending Limit Warning Banner */}
       {spendingLimitEnabled && currentMonthSpending > spendingLimitAmount && (
         <motion.div
           variants={itemVariants}
+          style={{ order: -10 }}
           className="bg-red-500 border-4 border-black text-black p-4 rounded-2xl shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex gap-3.5 items-start relative overflow-hidden"
         >
           <div className="absolute right-[-10px] top-[-10px] text-black/5 text-7xl font-black pointer-events-none select-none">
@@ -1782,7 +1853,7 @@ export default function HomeView({
       <motion.div 
         variants={itemVariants} 
         className="flex gap-4 items-center overflow-x-auto py-3 px-4 bg-volt-surface border border-white/5 rounded-2xl scrollbar-none scroll-smooth select-none"
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        style={{ WebkitOverflowScrolling: 'touch', order: -9 }}
         onMouseDown={(e) => {
           const container = e.currentTarget;
           container.dataset.isDown = 'true';
@@ -1867,75 +1938,94 @@ export default function HomeView({
         })}
       </motion.div>
 
+      {/* Dashboard Customization Header Bar */}
+      <div style={{ order: -8 }} className="flex justify-between items-center px-1">
+        <span className="text-[10px] font-black text-white uppercase tracking-wider">
+          Seu Dashboard
+        </span>
+        <button
+          onClick={() => setIsCustomizeModalOpen(true)}
+          className="flex items-center gap-1.5 text-[11px] font-black uppercase text-volt-green hover:text-emerald-400 bg-volt-green/10 border border-volt-green/20 px-3 py-1.5 rounded-full cursor-pointer transition-all active:scale-95 shadow-[0_0_10px_rgba(0,229,255,0.05)]"
+        >
+          <Settings size={12} className="animate-spin-slow" />
+          Personalizar Painel
+        </button>
+      </div>
+
       {/* Account Balance Card */}
-      <motion.section
-        variants={itemVariants}
-        className="bg-volt-surface border border-white/5 rounded-2xl p-5 flex flex-col gap-2 relative overflow-hidden neon-glow active:scale-[0.99] transition-transform"
-      >
-        <div className="flex justify-between items-center w-full">
-          <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-volt-green animate-ping"></span>
-            Saldo em conta
-          </span>
-          <button
-            onClick={toggleBalanceVisibility}
-            className="text-on-surface-variant hover:text-volt-green transition-colors p-1 rounded-full hover:bg-white/5"
-          >
-            {balanceIsVisible ? <Eye size={18} /> : <EyeOff size={18} />}
-          </button>
-        </div>
-
-        <div className="flex items-baseline gap-2 mt-1">
-          <span className="text-xl font-bold text-volt-green">R$</span>
-          {balanceIsVisible ? (
-            <span className="text-3xl font-black text-white tracking-tight">
-              {accountBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+      {isWidgetVisible('balance') && (
+        <motion.section
+          variants={itemVariants}
+          style={{ order: getWidgetIndex('balance') }}
+          className="bg-volt-surface border border-white/5 rounded-2xl p-5 flex flex-col gap-2 relative overflow-hidden neon-glow active:scale-[0.99] transition-transform"
+        >
+          <div className="flex justify-between items-center w-full">
+            <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-volt-green animate-ping"></span>
+              Saldo em conta
             </span>
-          ) : (
-            <span className="text-3xl font-black text-white/50 tracking-widest">••••••</span>
-          )}
-        </div>
+            <button
+              onClick={toggleBalanceVisibility}
+              className="text-on-surface-variant hover:text-volt-green transition-colors p-1 rounded-full hover:bg-white/5"
+            >
+              {balanceIsVisible ? <Eye size={18} /> : <EyeOff size={18} />}
+            </button>
+          </div>
 
-        <div className="mt-2 flex items-center gap-1.5 text-volt-green/80 text-[11px] font-semibold">
-          <TrendingUp size={14} />
-          <span>+2.5% este mês (Rendimento 110% CDI)</span>
-        </div>
+          <div className="flex items-baseline gap-2 mt-1">
+            <span className="text-xl font-bold text-volt-green">R$</span>
+            {balanceIsVisible ? (
+              <span className="text-3xl font-black text-white tracking-tight">
+                {accountBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </span>
+            ) : (
+              <span className="text-3xl font-black text-white/50 tracking-widest">••••••</span>
+            )}
+          </div>
 
-        {/* Floating action buttons directly on the card to Pix, deposit, & voice add */}
-        <div className="grid grid-cols-3 gap-1.5 mt-4 pt-4 border-t border-white/5">
-          <button
-            onClick={openPixModal}
-            className="py-2 px-2 bg-volt-green text-black rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-transform cursor-pointer"
-          >
-            <Bolt size={13} className="fill-current" />
-            Enviar Pix
-          </button>
-          <button
-            onClick={openDepositModal}
-            className="py-2 px-2 bg-white/5 border border-white/10 text-white rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 hover:bg-white/10 active:scale-95 transition-transform cursor-pointer"
-          >
-            <Sparkles size={13} className="text-volt-green" />
-            Depositar
-          </button>
-          <button
-            onClick={() => setIsVoiceModalOpen(true)}
-            className="py-2 px-2 bg-white/5 border border-white/10 text-volt-green rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 hover:bg-white/10 active:scale-95 transition-transform cursor-pointer relative"
-          >
-            <span className="absolute -top-1 -right-1 flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-volt-green opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-volt-green"></span>
-            </span>
-            <Mic size={13} className="text-volt-green" />
-            Lançar por Voz
-          </button>
-        </div>
-      </motion.section>
+          <div className="mt-2 flex items-center gap-1.5 text-volt-green/80 text-[11px] font-semibold">
+            <TrendingUp size={14} />
+            <span>+2.5% este mês (Rendimento 110% CDI)</span>
+          </div>
+
+          {/* Floating action buttons directly on the card to Pix, deposit, & voice add */}
+          <div className="grid grid-cols-3 gap-1.5 mt-4 pt-4 border-t border-white/5">
+            <button
+              onClick={openPixModal}
+              className="py-2 px-2 bg-volt-green text-black rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 shadow-md active:scale-95 transition-transform cursor-pointer"
+            >
+              <Bolt size={13} className="fill-current" />
+              Enviar Pix
+            </button>
+            <button
+              onClick={openDepositModal}
+              className="py-2 px-2 bg-white/5 border border-white/10 text-white rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 hover:bg-white/10 active:scale-95 transition-transform cursor-pointer"
+            >
+              <Sparkles size={13} className="text-volt-green" />
+              Depositar
+            </button>
+            <button
+              onClick={() => setIsVoiceModalOpen(true)}
+              className="py-2 px-2 bg-white/5 border border-white/10 text-volt-green rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 hover:bg-white/10 active:scale-95 transition-transform cursor-pointer relative"
+            >
+              <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-volt-green opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-volt-green"></span>
+              </span>
+              <Mic size={13} className="text-volt-green" />
+              Lançar por Voz
+            </button>
+          </div>
+        </motion.section>
+      )}
 
       {/* Central de Dashboards e Insights - Painel de Controle */}
-      <motion.section
-        variants={itemVariants}
-        className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-white flex flex-col gap-3 animate-fadeIn"
-      >
+      {isWidgetVisible('insights_panel') && (
+        <motion.section
+          variants={itemVariants}
+          style={{ order: getWidgetIndex('insights_panel') }}
+          className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-white flex flex-col gap-3 animate-fadeIn"
+        >
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-volt-green border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs text-black">
@@ -2073,9 +2163,15 @@ export default function HomeView({
           </button>
         </div>
       </motion.section>
+      )}
 
       {/* Quick Access Grid */}
-      <motion.section variants={itemVariants} className="space-y-3">
+      {isWidgetVisible('quick_actions') && (
+        <motion.section
+          variants={itemVariants}
+          style={{ order: getWidgetIndex('quick_actions') }}
+          className="space-y-3"
+        >
         <div className="flex justify-between items-center px-1">
           <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">
             Acesso Rápido
@@ -2130,10 +2226,10 @@ export default function HomeView({
               highlight: false,
             },
             {
-              label: 'Contas',
+              label: 'Pagar Boleto',
               icon: Receipt,
-              action: () => alert('Contas e boletos para pagamento serão importados automaticamente pelo seu DDA.'),
-              highlight: false,
+              action: openBoletoModal || (() => alert('Contas e boletos para pagamento serão importados automaticamente pelo seu DDA.')),
+              highlight: true,
             },
             {
               label: 'Extrato',
@@ -2167,9 +2263,15 @@ export default function HomeView({
           })}
         </div>
       </motion.section>
+      )}
 
       {/* "Aprenda mais" (Learn more) section - Styled exactly like the uploaded image */}
-      <motion.section variants={itemVariants} className="space-y-3">
+      {isWidgetVisible('learn_more') && (
+        <motion.section
+          variants={itemVariants}
+          style={{ order: getWidgetIndex('learn_more') }}
+          className="space-y-3"
+        >
         <div className="flex justify-between items-center px-1">
           <h3 className="text-xs font-black text-white dark:text-white uppercase tracking-wider">
             Aprenda mais
@@ -2317,12 +2419,15 @@ export default function HomeView({
           </button>
         </div>
       </motion.section>
+      )}
 
       {/* Monthly spending goal tracker card */}
-      <motion.section
-        variants={itemVariants}
-        className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black flex flex-col gap-4"
-      >
+      {isWidgetVisible('monthly_budget') && (
+        <motion.section
+          variants={itemVariants}
+          style={{ order: getWidgetIndex('monthly_budget') }}
+          className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black flex flex-col gap-4"
+        >
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-[#00E5FF] border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs">
@@ -2423,12 +2528,15 @@ export default function HomeView({
           </div>
         )}
       </motion.section>
+      )}
 
       {/* Monthly Financial Health Section */}
-      <motion.section
-        variants={itemVariants}
-        className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black flex flex-col gap-3.5 animate-fadeIn"
-      >
+      {isWidgetVisible('financial_health') && (
+        <motion.section
+          variants={itemVariants}
+          style={{ order: getWidgetIndex('financial_health') }}
+          className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black flex flex-col gap-3.5 animate-fadeIn"
+        >
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <div className={`w-8 h-8 rounded-xl border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs ${
@@ -2513,12 +2621,15 @@ export default function HomeView({
           Analisar Saúde Financeira 🩺
         </button>
       </motion.section>
+      )}
 
       {/* Recurring Payments Section */}
-      <motion.section
-        variants={itemVariants}
-        className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black flex flex-col gap-4"
-      >
+      {isWidgetVisible('recurring_payments') && (
+        <motion.section
+          variants={itemVariants}
+          style={{ order: getWidgetIndex('recurring_payments') }}
+          className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black flex flex-col gap-4"
+        >
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-[#00E5FF] border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs">
@@ -2783,12 +2894,15 @@ export default function HomeView({
           )}
         </div>
       </motion.section>
+      )}
 
       {/* Credit Card Section */}
-      <motion.section
-        variants={itemVariants}
-        className="bg-volt-surface rounded-2xl border border-white/5 overflow-hidden shadow-lg"
-      >
+      {isWidgetVisible('credit_card') && (
+        <motion.section
+          variants={itemVariants}
+          style={{ order: getWidgetIndex('credit_card') }}
+          className="bg-volt-surface rounded-2xl border border-white/5 overflow-hidden shadow-lg"
+        >
         <div className="p-5 flex flex-col gap-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2 text-white">
@@ -2832,15 +2946,18 @@ export default function HomeView({
           </button>
         </div>
       </motion.section>
+      )}
 
       {/* Analytics, Insights, and Trends sections have been moved to slide-up drawers triggered by the 'Painel de Análise e Insights' panel above */}
 
 
 
       {/* Spending Insights Section */}
-      <motion.section
-        variants={itemVariants}
-        className={`rounded-2xl border-2 p-5 flex flex-col gap-4 ${
+      {isWidgetVisible('spending_insights') && (
+        <div style={{ order: getWidgetIndex('spending_insights') }} className="flex flex-col gap-6 w-full">
+          <motion.section
+            variants={itemVariants}
+            className={`rounded-2xl border-2 p-5 flex flex-col gap-4 ${
           theme === 'midnight'
             ? 'bg-zinc-900/40 border-zinc-800 text-white shadow-[2px_2px_0px_0px_rgba(0,255,157,0.15)]'
             : 'bg-white border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
@@ -4592,12 +4709,16 @@ export default function HomeView({
           </div>
         )}
       </motion.section>
+        </div>
+      )}
 
       {/* Transactions Search and List Section */}
-      <motion.section
-        variants={itemVariants}
-        className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black flex flex-col gap-4"
-      >
+      {isWidgetVisible('transactions') && (
+        <motion.section
+          variants={itemVariants}
+          style={{ order: getWidgetIndex('transactions') }}
+          className="bg-volt-surface rounded-2xl border-4 border-black p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-black flex flex-col gap-4"
+        >
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-[#A2FF00] border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs">
@@ -4677,13 +4798,16 @@ export default function HomeView({
           </AnimatePresence>
         </div>
       </motion.section>
+      )}
 
       {/* Bento Teaser Card / Investments */}
-      <motion.section
-        variants={itemVariants}
-        onClick={() => alert('Parabéns pelo interesse! A Carteira Volt Rendimentos já está em desenvolvimento e oferecerá aplicações automáticas no CDI.')}
-        className="relative rounded-2xl h-44 bg-volt-surface overflow-hidden flex items-center p-5 group cursor-pointer active:scale-[0.99] transition-transform shadow-2xl"
-      >
+      {isWidgetVisible('investments') && (
+        <motion.section
+          variants={itemVariants}
+          style={{ order: getWidgetIndex('investments') }}
+          onClick={() => alert('Parabéns pelo interesse! A Carteira Volt Rendimentos já está em desenvolvimento e oferecerá aplicações automáticas no CDI.')}
+          className="relative rounded-2xl h-44 bg-volt-surface overflow-hidden flex items-center p-5 group cursor-pointer active:scale-[0.99] transition-transform shadow-2xl"
+        >
         <div className="z-10 flex flex-col gap-1.5 max-w-[62%]">
           <span className="text-[10px] font-extrabold text-volt-green uppercase tracking-wider">
             Investimentos
@@ -4706,6 +4830,7 @@ export default function HomeView({
           />
         </div>
       </motion.section>
+      )}
 
       {/* Financial Health Modal */}
       <FinancialHealthModal
@@ -4724,6 +4849,135 @@ export default function HomeView({
         onAddRecurringBill={handleAddRecurringBillFromModal}
         theme={theme}
       />
+
+      {/* Dashboard Customization Modal */}
+      <AnimatePresence>
+        {isCustomizeModalOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="customize-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.6 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsCustomizeModalOpen(false)}
+              className="fixed inset-0 bg-black/80 z-50 backdrop-blur-sm"
+            />
+
+            {/* Modal Container */}
+            <motion.div
+              key="customize-modal"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'spring', duration: 0.4 }}
+              className="fixed inset-x-4 top-[10%] bottom-[10%] max-w-md mx-auto bg-volt-surface border-4 border-black rounded-3xl p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] z-50 overflow-hidden flex flex-col gap-4 text-white"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center pb-3 border-b-2 border-white/10 shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-volt-green border-2 border-black flex items-center justify-center font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs text-black">
+                    ⚙️
+                  </div>
+                  <div>
+                    <h3 className="font-black text-sm uppercase tracking-wider text-white">Personalizar Painel</h3>
+                    <p className="text-[10px] text-zinc-400 font-bold">Ordene e oculte seus widgets</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsCustomizeModalOpen(false)}
+                  className="p-1.5 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Widget List */}
+              <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 scrollbar-none">
+                {widgets.map((widget, idx) => (
+                  <motion.div
+                    key={widget.id}
+                    layout
+                    className={`flex items-center justify-between p-3 rounded-xl border-2 border-black/30 transition-all ${
+                      widget.visible 
+                        ? 'bg-zinc-900/40 border-volt-green/20 text-white' 
+                        : 'bg-zinc-950/80 border-white/5 opacity-50 text-zinc-500'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {/* Drag Handle representation */}
+                      <span className="text-zinc-500 shrink-0">
+                        <GripVertical size={16} />
+                      </span>
+                      
+                      {/* Emoji Icon */}
+                      <span className="w-7 h-7 rounded-lg bg-zinc-950 flex items-center justify-center text-xs shrink-0 border border-white/10">
+                        {widget.icon}
+                      </span>
+
+                      {/* Name */}
+                      <span className="text-xs font-black truncate uppercase tracking-wider">
+                        {widget.name}
+                      </span>
+                    </div>
+
+                    {/* Controls: Reorder and Toggle */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Reorder Buttons */}
+                      <div className="flex flex-col gap-0.5">
+                        <button
+                          onClick={() => moveWidget(idx, 'up')}
+                          disabled={idx === 0}
+                          className="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-volt-green disabled:opacity-20 disabled:pointer-events-none transition-all cursor-pointer"
+                        >
+                          <ArrowUp size={12} />
+                        </button>
+                        <button
+                          onClick={() => moveWidget(idx, 'down')}
+                          disabled={idx === widgets.length - 1}
+                          className="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-volt-green disabled:opacity-20 disabled:pointer-events-none transition-all cursor-pointer"
+                        >
+                          <ArrowDown size={12} />
+                        </button>
+                      </div>
+
+                      {/* Toggle switch custom styled */}
+                      <button
+                        onClick={() => toggleWidgetVisibility(widget.id)}
+                        className={`w-10 h-6 rounded-full p-0.5 transition-colors cursor-pointer border border-black ${
+                          widget.visible ? 'bg-volt-green' : 'bg-zinc-800'
+                        }`}
+                      >
+                        <div
+                          className={`w-[18px] h-[18px] rounded-full bg-black transition-transform ${
+                            widget.visible ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+
+              {/* Footer */}
+              <div className="pt-3 border-t-2 border-white/10 flex gap-2 shrink-0">
+                <button
+                  onClick={resetWidgets}
+                  className="flex-1 py-2.5 bg-zinc-900 border-2 border-white/10 hover:border-white/20 text-white rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer transition-all active:scale-95"
+                >
+                  Restaurar Padrão
+                </button>
+                <button
+                  onClick={() => setIsCustomizeModalOpen(false)}
+                  className="flex-1 py-2.5 bg-[#00ff9d] border-2 border-black text-black rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer hover:bg-[#00e38b] transition-all active:scale-95 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                >
+                  Concluir
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Bottom Sliding Drawers (Modais de Deslizar) */}
       <AnimatePresence>

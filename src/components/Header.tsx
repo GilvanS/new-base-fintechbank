@@ -554,24 +554,56 @@ export default function Header({
                           Nenhuma nova notificação 🎉
                         </div>
                       ) : (
-                        notifications.map((notif) => (
-                          <div key={notif.id} className="p-2.5 rounded-xl bg-white/5 border border-white/5 space-y-1 relative group">
-                            <div className="flex justify-between items-start pr-4">
-                              <span className="text-xs font-bold text-white leading-tight">{notif.title}</span>
-                              <span className="text-[9px] text-zinc-400 shrink-0 font-medium ml-1">{notif.time}</span>
-                            </div>
-                            <p className="text-[11px] text-zinc-300 leading-relaxed pr-4">{notif.description}</p>
-                            
-                            {/* Individual clear button */}
-                            <button
-                              onClick={() => onClearNotification(notif.id)}
-                              className="absolute top-2 right-2 text-zinc-500 hover:text-red-400 text-[10px] font-bold cursor-pointer transition-colors p-0.5 rounded hover:bg-white/5"
-                              title="Descartar"
+                        <AnimatePresence initial={false}>
+                          {notifications.map((notif) => (
+                            <motion.div
+                              key={notif.id}
+                              initial={{ opacity: 0, y: -10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.9, height: 0, overflow: 'hidden' }}
+                              transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+                              className="relative overflow-hidden rounded-xl bg-zinc-950/40"
                             >
-                              ✕
-                            </button>
-                          </div>
-                        ))
+                              {/* Swipe Action Indicator underneath */}
+                              <div className="absolute inset-0 bg-red-500/20 rounded-xl flex items-center justify-between px-3 pointer-events-none">
+                                <span className="text-[9px] font-black text-red-400 uppercase tracking-widest flex items-center gap-1">
+                                  <Trash2 size={10} /> Descartar
+                                </span>
+                                <span className="text-[9px] font-black text-red-400 uppercase tracking-widest flex items-center gap-1">
+                                  Descartar <Trash2 size={10} />
+                                </span>
+                              </div>
+
+                              <motion.div
+                                drag="x"
+                                dragConstraints={{ left: 0, right: 0 }}
+                                dragElastic={{ left: 0.8, right: 0.8 }}
+                                onDragEnd={(event, info) => {
+                                  if (Math.abs(info.offset.x) > 100) {
+                                    onClearNotification(notif.id);
+                                  }
+                                }}
+                                whileDrag={{ scale: 1.02 }}
+                                className="p-2.5 rounded-xl bg-zinc-900 border border-white/5 space-y-1 relative group cursor-grab active:cursor-grabbing touch-pan-y z-10 select-none"
+                              >
+                                <div className="flex justify-between items-start pr-4">
+                                  <span className="text-xs font-bold text-white leading-tight">{notif.title}</span>
+                                  <span className="text-[9px] text-zinc-400 shrink-0 font-medium ml-1">{notif.time}</span>
+                                </div>
+                                <p className="text-[11px] text-zinc-300 leading-relaxed pr-4">{notif.description}</p>
+                                
+                                {/* Individual clear button */}
+                                <button
+                                  onClick={() => onClearNotification(notif.id)}
+                                  className="absolute top-2 right-2 text-zinc-500 hover:text-red-400 text-[10px] font-bold cursor-pointer transition-colors p-0.5 rounded hover:bg-white/5 z-20"
+                                  title="Descartar"
+                                >
+                                  ✕
+                                </button>
+                              </motion.div>
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
                       )}
                     </div>
                   </motion.div>
