@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, ChevronDown, ChevronUp, AlertCircle, Calendar, Check, 
@@ -29,6 +29,80 @@ export default function BoletoModal({
 
   // Navigation steps
   const [step, setStep] = useState<BoletoStep>('scan_camera');
+  
+  // Camera & Scan states
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [cameraPermission, setCameraPermission] = useState<'prompt' | 'granted' | 'denied'>('prompt');
+  const [isFlashOn, setIsFlashOn] = useState(false);
+  const [scannerMessage, setScannerMessage] = useState('Centralize o código de barras');
+
+  useEffect(() => {
+    let active = true;
+    if (isOpen && step === 'scan_camera') {
+      const startCamera = async () => {
+        try {
+          setCameraPermission('prompt');
+          setScannerMessage('Acessando câmera...');
+          const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } 
+          });
+          if (active) {
+            streamRef.current = stream;
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream;
+            }
+            setCameraPermission('granted');
+            setScannerMessage('Aguardando detecção de código...');
+          } else {
+            stream.getTracks().forEach(track => track.stop());
+          }
+        } catch (err) {
+          console.error('Error opening camera:', err);
+          if (active) {
+            setCameraPermission('denied');
+            setScannerMessage('Simulador de câmera ativo');
+          }
+        }
+      };
+
+      startCamera();
+
+      return () => {
+        active = false;
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+          streamRef.current = null;
+        }
+      };
+    } else {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+    }
+  }, [isOpen, step]);
+
+  const toggleFlash = async () => {
+    const nextFlash = !isFlashOn;
+    setIsFlashOn(nextFlash);
+    
+    try {
+      if (streamRef.current) {
+        const videoTrack = streamRef.current.getVideoTracks()[0];
+        if (videoTrack) {
+          const capabilities = videoTrack.getCapabilities() as any;
+          if (capabilities.torch) {
+            await videoTrack.applyConstraints({
+              advanced: [{ torch: nextFlash }]
+            } as any);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Torch constraint not supported in this browser:", e);
+    }
+  };
   
   // Input states
   const [rawBarcode, setRawBarcode] = useState('34198862666531252277792218900006890430000039322');
@@ -313,9 +387,9 @@ export default function BoletoModal({
               <>
                 {/* SCREEN 0: Scan Camera (Leitor de código de barras) */}
                 {step === 'scan_camera' && (
-                  <div className="flex-grow flex flex-col h-full bg-zinc-950 text-white">
+                  <div className="flex-grow flex flex-col h-full bg-zinc-950 text-white select-none">
                     {/* Top Action Navbar */}
-                    <div className="h-14 flex items-center justify-between px-4 shrink-0 border-b border-zinc-800 bg-zinc-900/50">
+                    <div className="h-14 flex items-center justify-between px-4 shrink-0 border-b border-zinc-900 bg-zinc-900/50 z-30">
                       <div className="flex items-center">
                         <button 
                           onClick={onClose}
@@ -324,95 +398,222 @@ export default function BoletoModal({
                           <ArrowLeft size={22} className="stroke-[2.5]" />
                         </button>
                         <h2 className="ml-3 font-extrabold text-base font-display">
-                          Pagar com Código
+                          Leitor de Código
                         </h2>
                       </div>
                       
-                      {/* Simulating Flash Toggle */}
-                      <button className="p-2 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all cursor-pointer">
-                        <Zap size={20} />
+                      {/* Interactive Flash Toggle */}
+                      <button 
+                        onClick={toggleFlash}
+                        className={`p-2 rounded-full transition-all cursor-pointer ${
+                          isFlashOn 
+                            ? 'text-yellow-400 bg-zinc-800 shadow-[0_0_10px_rgba(250,204,21,0.3)]' 
+                            : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                        }`}
+                        title={isFlashOn ? "Desativar Flash" : "Ativar Flash"}
+                      >
+                        <Zap size={20} className={isFlashOn ? "fill-yellow-400" : ""} />
                       </button>
                     </div>
 
                     {/* Camera view content */}
-                    <div className="flex-1 flex flex-col p-6 items-center justify-center relative overflow-hidden">
-                      {/* Camera simulator backdrop & frame */}
-                      <div className="absolute inset-0 bg-radial from-transparent to-zinc-950/90 z-0 pointer-events-none" />
+                    <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden bg-black z-10">
                       
-                      {/* Scanning Box container */}
-                      <div className="w-full aspect-[4/3] max-w-[280px] rounded-2xl relative border-2 border-dashed border-zinc-700/60 flex items-center justify-center bg-black/40 z-10 overflow-hidden shadow-inner">
-                        {/* Target Frame Corners */}
-                        <div className="absolute top-2 left-2 w-5 h-5 border-t-4 border-l-4 border-[#00ff9d] rounded-tl-md" />
-                        <div className="absolute top-2 right-2 w-5 h-5 border-t-4 border-r-4 border-[#00ff9d] rounded-tr-md" />
-                        <div className="absolute bottom-2 left-2 w-5 h-5 border-b-4 border-l-4 border-[#00ff9d] rounded-bl-md" />
-                        <div className="absolute bottom-2 right-2 w-5 h-5 border-b-4 border-r-4 border-[#00ff9d] rounded-br-md" />
+                      {/* HTML5 video element for real-time camera stream */}
+                      {cameraPermission === 'granted' ? (
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="absolute inset-0 w-full h-full object-cover z-0"
+                        />
+                      ) : (
+                        /* Premium Fallback camera simulation view when hardware stream isn't accessible */
+                        <div className="absolute inset-0 w-full h-full bg-[#0d0f12] overflow-hidden z-0 flex items-center justify-center">
+                          {/* Ambient electronic matrix noise simulation */}
+                          <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[linear-gradient(rgba(18,24,38,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]" />
+                          
+                          {/* Moving focus circles animation */}
+                          <motion.div 
+                            animate={{ 
+                              scale: [0.95, 1.05, 0.95],
+                              opacity: [0.3, 0.5, 0.3]
+                            }}
+                            transition={{ 
+                              duration: 8, 
+                              repeat: Infinity, 
+                              ease: 'easeInOut' 
+                            }}
+                            className="absolute w-[450px] h-[450px] rounded-full border border-[#00ff9d]/5 flex items-center justify-center pointer-events-none"
+                          >
+                            <div className="w-[300px] h-[300px] rounded-full border border-dashed border-[#00ff9d]/5 flex items-center justify-center">
+                              <div className="w-[150px] h-[150px] rounded-full border border-[#00ff9d]/5" />
+                            </div>
+                          </motion.div>
 
-                        {/* Scanner Laser Animation line */}
+                          {/* Dynamic scanning feed simulation with multiple digital barcode rows passing by */}
+                          <div className="w-full h-full opacity-35 flex items-center justify-center absolute inset-0">
+                            <motion.div
+                              animate={{
+                                y: [-100, 100, -100]
+                              }}
+                              transition={{
+                                duration: 15,
+                                repeat: Infinity,
+                                ease: "linear"
+                              }}
+                              className="w-full h-1/2 flex flex-col gap-8 justify-center items-center opacity-20 pointer-events-none"
+                            >
+                              <div className="w-48 h-12 bg-white/5 border border-white/10 rounded flex items-center justify-center">
+                                <span className="font-mono text-[8px] text-zinc-500 tracking-widest">34198.86266...</span>
+                              </div>
+                            </motion.div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Interactive Flashlight Glow overlay inside screen */}
+                      <AnimatePresence>
+                        {isFlashOn && (
+                          <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 0.35 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-radial from-white via-white/10 to-transparent pointer-events-none z-10 mix-blend-screen"
+                          />
+                        )}
+                      </AnimatePresence>
+
+                      {/* --- VISUAL SCANNING FRAME OVERLAY (The Mask Cutout) --- */}
+                      {/* Top Mask */}
+                      <div className="absolute top-0 inset-x-0 h-[calc(50%-75px)] bg-black/65 backdrop-blur-[1px] border-b border-white/5 z-20 pointer-events-none flex flex-col justify-end items-center pb-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-zinc-500 flex items-center gap-1.5 animate-pulse">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#00ff9d]" /> 
+                          {cameraPermission === 'granted' ? 'Câmera Ativa' : 'Simulador Ativo'}
+                        </span>
+                      </div>
+                      
+                      {/* Bottom Mask */}
+                      <div className="absolute bottom-0 inset-x-0 h-[calc(50%-75px)] bg-black/65 backdrop-blur-[1px] border-t border-white/5 z-20 pointer-events-none" />
+                      
+                      {/* Left Mask */}
+                      <div className="absolute left-0 top-[calc(50%-75px)] h-[150px] w-[calc(50%-145px)] bg-black/65 backdrop-blur-[1px] z-20 pointer-events-none" />
+                      
+                      {/* Right Mask */}
+                      <div className="absolute right-0 top-[calc(50%-75px)] h-[150px] w-[calc(50%-145px)] bg-black/65 backdrop-blur-[1px] z-20 pointer-events-none" />
+
+                      {/* Central Viewfinder Container Frame */}
+                      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[290px] h-[150px] z-30 pointer-events-none">
+                        
+                        {/* Target Frame Glowing Corners */}
+                        <div className="absolute top-0 left-0 w-7 h-7 border-t-[4px] border-l-[4px] border-[#00ff9d] rounded-tl-xl shadow-[0_0_15px_rgba(0,255,157,0.4)]" />
+                        <div className="absolute top-0 right-0 w-7 h-7 border-t-[4px] border-r-[4px] border-[#00ff9d] rounded-tr-xl shadow-[0_0_15px_rgba(0,255,157,0.4)]" />
+                        <div className="absolute bottom-0 left-0 w-7 h-7 border-b-[4px] border-l-[4px] border-[#00ff9d] rounded-bl-xl shadow-[0_0_15px_rgba(0,255,157,0.4)]" />
+                        <div className="absolute bottom-0 right-0 w-7 h-7 border-b-[4px] border-r-[4px] border-[#00ff9d] rounded-br-xl shadow-[0_0_15px_rgba(0,255,157,0.4)]" />
+
+                        {/* Thin Finder Inner Reticle Box */}
+                        <div className="absolute inset-2 border border-white/10 rounded-lg flex items-center justify-center">
+                          {/* Crosshair Center Finder */}
+                          <div className="w-4 h-4 border-t border-l border-white/25 absolute top-2 left-2" />
+                          <div className="w-4 h-4 border-t border-r border-white/25 absolute top-2 right-2" />
+                          <div className="w-4 h-4 border-b border-l border-white/25 absolute bottom-2 left-2" />
+                          <div className="w-4 h-4 border-b border-r border-white/25 absolute bottom-2 right-2" />
+                        </div>
+
+                        {/* Scanner Laser Animation line (glides up & down inside viewfinder) */}
                         <motion.div 
                           animate={{ 
-                            top: ['10%', '90%', '10%'] 
+                            top: ['6%', '94%', '6%'] 
                           }}
                           transition={{ 
-                            duration: 2.5, 
+                            duration: 2.2, 
                             repeat: Infinity, 
                             ease: 'easeInOut' 
                           }}
-                          className="absolute inset-x-4 h-0.5 bg-red-500 shadow-[0_0_10px_2px_rgba(239,68,68,0.8)] z-20"
+                          className="absolute inset-x-2 h-0.5 bg-red-500 shadow-[0_0_14px_3px_rgba(239,68,68,0.95)] z-20"
                         />
 
-                        {/* Animated dummy barcode graphic inside */}
-                        <div className="opacity-40 flex flex-col items-center gap-1.5 transform scale-90">
-                          <div className="flex gap-1">
-                            <span className="w-1 h-14 bg-white" />
-                            <span className="w-2 h-14 bg-white" />
-                            <span className="w-0.5 h-14 bg-white" />
-                            <span className="w-3 h-14 bg-white" />
-                            <span className="w-1.5 h-14 bg-white" />
-                            <span className="w-1 h-14 bg-white" />
-                            <span className="w-2.5 h-14 bg-white" />
-                            <span className="w-0.5 h-14 bg-white" />
-                            <span className="w-1 h-14 bg-white" />
-                            <span className="w-3 h-14 bg-white" />
-                            <span className="w-1.5 h-14 bg-white" />
-                            <span className="w-1 h-14 bg-white" />
-                          </div>
+                        {/* Interactive simulation barcode visualization */}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center opacity-30 gap-1 transform scale-90">
+                          <motion.div 
+                            animate={{
+                              scale: [0.98, 1.02, 0.98],
+                              opacity: [0.2, 0.4, 0.2]
+                            }}
+                            transition={{
+                              duration: 3,
+                              repeat: Infinity,
+                              ease: "easeInOut"
+                            }}
+                            className="flex gap-1"
+                          >
+                            <span className="w-1.5 h-16 bg-white rounded-2xs" />
+                            <span className="w-3 h-16 bg-white rounded-2xs" />
+                            <span className="w-0.5 h-16 bg-white rounded-2xs" />
+                            <span className="w-4 h-16 bg-white rounded-2xs" />
+                            <span className="w-2 h-16 bg-white rounded-2xs" />
+                            <span className="w-1 h-16 bg-white rounded-2xs" />
+                            <span className="w-3.5 h-16 bg-white rounded-2xs" />
+                            <span className="w-0.5 h-16 bg-white rounded-2xs" />
+                            <span className="w-1.5 h-16 bg-white rounded-2xs" />
+                            <span className="w-4 h-16 bg-white rounded-2xs" />
+                            <span className="w-2 h-16 bg-white rounded-2xs" />
+                            <span className="w-1 h-16 bg-white rounded-2xs" />
+                          </motion.div>
                           <span className="font-mono text-[8px] tracking-widest text-zinc-400">34198.86266 ... 39322</span>
                         </div>
                       </div>
 
-                      {/* Instructions */}
-                      <div className="mt-8 text-center space-y-2 z-10 px-2">
-                        <p className="text-sm font-extrabold text-zinc-100">
-                          Posicione o código de barras na área demarcada
-                        </p>
-                        <p className="text-xs text-zinc-400 leading-relaxed font-medium">
-                          A leitura do boleto é feita automaticamente com a sua câmera.
-                        </p>
+                      {/* Floating Indicator Status Overlay Message */}
+                      <div className="absolute top-[calc(50%+90px)] inset-x-0 text-center z-30 pointer-events-none px-6">
+                        <div className="inline-flex items-center gap-2 bg-black/75 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-zinc-800 shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
+                          <span className="relative flex h-2 w-2 shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00ff9d] opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00ff9d]"></span>
+                          </span>
+                          <span className="text-[11px] font-bold text-zinc-100 tracking-wide">
+                            {scannerMessage}
+                          </span>
+                        </div>
                       </div>
 
-                      {/* Simulation helpers */}
-                      <div className="mt-6 flex flex-col items-center gap-2 z-10 w-full px-4">
-                        <button
-                          onClick={() => setStep('boleto_info')}
-                          className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-[#00ff9d] rounded-full text-xs font-bold uppercase tracking-wider transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 border border-zinc-700"
-                        >
-                          <Sparkles size={14} /> Simular Leitura com Sucesso
-                        </button>
+                      {/* Quick helper tip */}
+                      <div className="absolute bottom-4 inset-x-6 z-20 text-center text-[11px] text-zinc-400 font-medium leading-relaxed px-4 pointer-events-none">
+                        Posicione o código de barras do boleto dentro do retângulo verde. A leitura é instantânea.
                       </div>
                     </div>
 
-                    {/* Footer bottom menu options */}
-                    <div className="p-6 bg-zinc-900 border-t border-zinc-800 shrink-0 flex flex-col items-center gap-4">
-                      <span className="text-[10px] uppercase font-black tracking-widest text-zinc-500">
-                        Não consegue ler o código?
-                      </span>
+                    {/* Bottom Toolbar & Simulation Controls */}
+                    <div className="p-5 bg-zinc-900 border-t border-zinc-800 shrink-0 flex flex-col items-center gap-4 z-20">
+                      {/* Simulate successful scan trigger */}
+                      <button
+                        onClick={() => {
+                          setScannerMessage('Detectando código...');
+                          setTimeout(() => {
+                            setStep('boleto_info');
+                          }, 600);
+                        }}
+                        className="w-full py-3.5 bg-gradient-to-r from-zinc-800 to-zinc-900 hover:from-zinc-750 hover:to-zinc-850 border border-zinc-750 text-[#00ff9d] rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-97 cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-black/40"
+                      >
+                        <Sparkles size={14} className="animate-pulse" />
+                        Simular Leitura do Código
+                      </button>
+
+                      <div className="w-full flex items-center gap-3">
+                        <div className="h-px bg-zinc-800 flex-1" />
+                        <span className="text-[9px] uppercase font-black tracking-widest text-zinc-500 shrink-0">
+                          Alternativa de Entrada
+                        </span>
+                        <div className="h-px bg-zinc-800 flex-1" />
+                      </div>
                       
                       <button
                         onClick={() => setStep('input_barcode')}
-                        className="w-full py-4 bg-zinc-800 border border-zinc-700 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-zinc-700 active:scale-98 transition-all cursor-pointer flex items-center justify-center gap-2"
+                        className="w-full py-3 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white rounded-xl font-bold text-xs uppercase tracking-wider active:scale-97 transition-all cursor-pointer flex items-center justify-center gap-2"
                       >
-                        <Keyboard size={18} />
-                        Digitar código de barras
+                        <Keyboard size={16} />
+                        Digitar código manualmente
                       </button>
                     </div>
                   </div>
